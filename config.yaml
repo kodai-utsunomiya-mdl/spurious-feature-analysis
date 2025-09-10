@@ -64,3 +64,11 @@ analyze_weight_singular_values: false
 analyze_activation_singular_values: false
 analyze_logit: false
 perform_tsne_visualization: false
+
+# ---------------------------------
+# wandb設定
+# ---------------------------------
+wandb:
+  enable: true
+  project: "sp_exp"
+  entity: "mdl-tsukuba"

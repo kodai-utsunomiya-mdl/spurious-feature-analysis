@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 import pandas as pd
+import wandb
 
 # スクリプトをインポート
 import data_loader
@@ -23,6 +24,16 @@ def main(config_path='config.yaml'):
     # 1. 設定ファイルの読み込み
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
+
+    # wandbの初期化
+    if config.get('wandb', {}).get('enable', False):
+        wandb.init(
+            project=config['wandb']['project'],
+            entity=config['wandb']['entity'],
+            config=config,
+            name=f"{config['experiment_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        print("✅ wandb is enabled and initialized.")
 
     # 2. 結果保存ディレクトリの作成
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -79,6 +90,10 @@ def main(config_path='config.yaml'):
 
     optimizer = optim.Adam(optimizer_params) if config['optimizer'] == 'Adam' else optim.SGD(optimizer_params, momentum=config['momentum'])
 
+    # wandbでモデルの勾配とパラメータを監視
+    if config.get('wandb', {}).get('enable', False):
+        wandb.watch(model, log='all', log_freq=100)
+
     all_target_layers = [f'layer_{i+1}' for i in range(config['num_hidden_layers'])]
     if config['analyze_logit']:
         all_target_layers.append('logit')
@@ -88,11 +103,11 @@ def main(config_path='config.yaml'):
     history = {k: [] for k in ['train_avg_loss', 'test_avg_loss', 'train_worst_loss', 'test_worst_loss',
                                'train_avg_acc', 'test_avg_acc', 'train_worst_acc', 'test_worst_acc',
                                'train_group_losses', 'test_group_losses', 'train_group_accs', 'test_group_accs']}
-    
+
     analysis_histories = {name: {} for name in [
         'mi_train', 'mi_test', 'cond_wd_train', 'cond_wd_test', 'intergroup_wd_train', 'intergroup_wd_test',
         'bary_wd_train', 'bary_wd_test', 'bregman_wd_train', 'bregman_wd_test', 'vec_avg_align_train',
-        'vec_avg_align_test', 'bary_align_train', 'bary_align_test', 'transport_align_train', 
+        'vec_avg_align_test', 'bary_align_train', 'bary_align_test', 'transport_align_train',
         'transport_align_test', 'weight_sv', 'activation_sv_train', 'activation_sv_test'
     ]}
 
@@ -115,6 +130,30 @@ def main(config_path='config.yaml'):
                 history[key_base].append(test_metrics[key_base.replace('test_', '')])
 
         print(f"Epoch {epoch+1:5d}/{config['epochs']} | Train [Loss: {train_metrics['avg_loss']:.4f}, Worst: {train_metrics['worst_loss']:.4f}, Acc: {train_metrics['avg_acc']:.4f}, Worst: {train_metrics['worst_acc']:.4f}] | Test [Loss: {test_metrics['avg_loss']:.4f}, Worst: {test_metrics['worst_loss']:.4f}, Acc: {test_metrics['avg_acc']:.4f}, Worst: {test_metrics['worst_acc']:.4f}]")
+
+        # wandbにメトリクスをログとして記録
+        if config.get('wandb', {}).get('enable', False):
+            log_metrics = {
+                'epoch': epoch + 1,
+                'train_avg_loss': train_metrics['avg_loss'],
+                'train_worst_loss': train_metrics['worst_loss'],
+                'train_avg_acc': train_metrics['avg_acc'],
+                'train_worst_acc': train_metrics['worst_acc'],
+                'test_avg_loss': test_metrics['avg_loss'],
+                'test_worst_loss': test_metrics['worst_loss'],
+                'test_avg_acc': test_metrics['avg_acc'],
+                'test_worst_acc': test_metrics['worst_acc'],
+            }
+            # グループごとのメトリクスもログに追加
+            for i, loss_val in enumerate(train_metrics['group_losses']):
+                log_metrics[f'train_group_{i}_loss'] = loss_val
+            for i, acc_val in enumerate(train_metrics['group_accs']):
+                log_metrics[f'train_group_{i}_acc'] = acc_val
+            for i, loss_val in enumerate(test_metrics['group_losses']):
+                log_metrics[f'test_group_{i}_loss'] = loss_val
+            for i, acc_val in enumerate(test_metrics['group_accs']):
+                log_metrics[f'test_group_{i}_acc'] = acc_val
+            wandb.log(log_metrics)
 
         current_epoch = epoch + 1
         if current_epoch in config.get('analysis_epochs', []) or current_epoch in config.get('tsne_visualization_epochs', []):
@@ -141,6 +180,10 @@ def main(config_path='config.yaml'):
     history_df.to_csv(os.path.join(result_dir, 'training_history.csv'))
 
     plotting.plot_all_results(history_df, analysis_histories, all_target_layers, result_dir, config)
+
+    # wandbの実行を終了
+    if config.get('wandb', {}).get('enable', False):
+        wandb.finish()
 
     print(f"\n✅ Experiment finished. All results saved in: {result_dir}")
 

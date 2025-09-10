@@ -1,0 +1,16 @@
+{"time":"2025-09-10T09:28:38.230033604Z","level":"INFO","msg":"stream: starting","core version":"0.21.3"}
+{"time":"2025-09-10T09:28:38.579885394Z","level":"INFO","msg":"stream: created new stream","id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.579996633Z","level":"INFO","msg":"stream: started","id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.580031657Z","level":"INFO","msg":"writer: started","stream_id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.580080393Z","level":"INFO","msg":"handler: started","stream_id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.580084004Z","level":"INFO","msg":"sender: started","stream_id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.751156652Z","level":"ERROR","msg":"HTTP error","status":403,"method":"POST","url":"https://api.wandb.ai/graphql"}
+{"time":"2025-09-10T09:28:38.751284757Z","level":"ERROR","msg":"runupserter: failed to init run","error":"returned error 403: {\"data\":{\"upsertBucket\":null},\"errors\":[{\"message\":\"permission denied\",\"path\":[\"upsertBucket\"],\"extensions\":{\"code\":\"PERMISSION_ERROR\"}}]}"}
+{"time":"2025-09-10T09:28:38.765089943Z","level":"INFO","msg":"stream: closing","id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.766615895Z","level":"ERROR","msg":"sender: uploadConfigFile: stream: no run"}
+{"time":"2025-09-10T09:28:38.982857989Z","level":"ERROR","msg":"HTTP error","status":404,"method":"POST","url":"https://api.wandb.ai/graphql"}
+{"time":"2025-09-10T09:28:38.982944661Z","level":"ERROR","msg":"runfiles: CreateRunFiles returned error: returned error 404: {\"data\":{\"createRunFiles\":null},\"errors\":[{\"message\":\"project utsunomiya/sp_exp_test not found during createRunFiles\",\"path\":[\"createRunFiles\"]}]}"}
+{"time":"2025-09-10T09:28:38.983808516Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-09-10T09:28:38.983921919Z","level":"INFO","msg":"handler: closed","stream_id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.984515625Z","level":"INFO","msg":"sender: closed","stream_id":"0sotwz5t"}
+{"time":"2025-09-10T09:28:38.984608544Z","level":"INFO","msg":"stream: closed","id":"0sotwz5t"}

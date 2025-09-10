@@ -12,7 +12,7 @@ cd ~/sp
 uv venv
 source .venv/bin/activate
 
-uv pip install torch torchvision numpy pandas matplotlib scikit-learn pyyaml wilds pot
+uv pip install torch torchvision numpy pandas matplotlib scikit-learn pyyaml wilds pot wandb
 
 python main.py
 

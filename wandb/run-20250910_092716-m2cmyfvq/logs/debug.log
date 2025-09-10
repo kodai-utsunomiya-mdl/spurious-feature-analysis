@@ -1,0 +1,15 @@
+2025-09-10 09:27:16,067 INFO    MainThread:751 [wandb_setup.py:_flush():81] Current SDK version is 0.21.3
+2025-09-10 09:27:16,068 INFO    MainThread:751 [wandb_setup.py:_flush():81] Configure stats pid to 751
+2025-09-10 09:27:16,068 INFO    MainThread:751 [wandb_setup.py:_flush():81] Loading settings from /home/utsu/.config/wandb/settings
+2025-09-10 09:27:16,068 INFO    MainThread:751 [wandb_setup.py:_flush():81] Loading settings from /home/utsu/sp/wandb/settings
+2025-09-10 09:27:16,068 INFO    MainThread:751 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2025-09-10 09:27:16,068 INFO    MainThread:751 [wandb_init.py:setup_run_log_directory():686] Logging user logs to /home/utsu/sp/wandb/run-20250910_092716-m2cmyfvq/logs/debug.log
+2025-09-10 09:27:16,068 INFO    MainThread:751 [wandb_init.py:setup_run_log_directory():687] Logging internal logs to /home/utsu/sp/wandb/run-20250910_092716-m2cmyfvq/logs/debug-internal.log
+2025-09-10 09:27:16,069 INFO    MainThread:751 [wandb_init.py:init():813] calling init triggers
+2025-09-10 09:27:16,069 INFO    MainThread:751 [wandb_init.py:init():818] wandb.init called with sweep_config: {}
+config: {'experiment_name': 'ColoredMNIST_muP_run', 'dataset_name': 'ColoredMNIST', 'loss_function': 'mse', 'activation_function': 'relu', 'initialization_method': 'muP', 'use_skip_connections': False, 'device': 'cuda', 'num_train_samples': 1000, 'num_test_samples': 2000, 'train_correlation': 0.8, 'test_correlation': 0.0, 'num_hidden_layers': 1, 'hidden_dim': 4096, 'epochs': 20000, 'batch_size': 1000, 'optimizer': 'SGD', 'learning_rate': 0.01, 'momentum': 0.9, 'analysis_epochs': [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 150, 200, 250, 300, 400, 500, 600, 700, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12000, 14000, 16000, 18000, 20000], 'tsne_visualization_epochs': [], 'analysis_target': 'both', 'n_neighbors_mi': 5, 'barycenter_support_size': 100, 'show_and_save_samples': True, 'analyze_mutual_information': False, 'analyze_intergroup_distance': True, 'analyze_conditional_distance': True, 'analyze_barycentric_distance': False, 'analyze_bregman_divergence': False, 'analyze_vector_averaging_alignment': True, 'analyze_barycentric_alignment': False, 'analyze_transport_alignment': False, 'analyze_weight_singular_values': False, 'analyze_activation_singular_values': False, 'analyze_logit': False, 'perform_tsne_visualization': False, 'wandb': {'enable': True, 'project': 'sp_exp', 'entity': 'utsunomiya'}, '_wandb': {}}
+2025-09-10 09:27:16,069 INFO    MainThread:751 [wandb_init.py:init():854] starting backend
+2025-09-10 09:27:16,284 INFO    MainThread:751 [wandb_init.py:init():857] sending inform_init request
+2025-09-10 09:27:16,292 INFO    MainThread:751 [wandb_init.py:init():865] backend started and connected
+2025-09-10 09:27:16,297 INFO    MainThread:751 [wandb_init.py:init():936] updated telemetry
+2025-09-10 09:27:16,316 INFO    MainThread:751 [wandb_init.py:init():960] communicating run to backend with 90.0 second timeout
