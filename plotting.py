@@ -26,7 +26,7 @@ plt.rc('text', usetex=False)
 
 def _save_and_close(fig, save_dir, filename):
     """
-    MatplotlibのFigureを指定されたディレクトリにファイルとして保存し、メモリを解放する。
+    MatplotlibのFigureを指定されたディレクトリにファイルとして保存し，メモリを解放
     """
     if not os.path.exists(save_dir):
         os.makedirs(save_dir, exist_ok=True)
@@ -43,7 +43,7 @@ def _save_and_close(fig, save_dir, filename):
 def visualize_tsne_layers(train_outputs, y_train, a_train, test_outputs, y_test, a_test, 
                           target_layers, epoch_num, save_dir):
     """
-    各層の特徴表現をt-SNEで可視化し、ファイルに保存する。
+    各層の特徴表現をt-SNEで可視化し，ファイルに保存
     """
     title_suffix = f" (Epoch {epoch_num})"
     print(f"\nVisualizing and saving t-SNE representations{title_suffix}...")
@@ -108,7 +108,7 @@ def visualize_tsne_layers(train_outputs, y_train, a_train, test_outputs, y_test,
 # ==============================================================================
 
 def plot_training_history(history_df, save_dir):
-    """学習過程の各種メトリクスをプロットし、2つの画像ファイルとして保存する"""
+    """学習過程の各種メトリクスをプロットし，2つの画像ファイルとして保存"""
     epochs = history_df.index + 1
     
     # --- Figure 1: 平均とワーストグループのメトリクス ---
@@ -163,7 +163,7 @@ def plot_training_history(history_df, save_dir):
     _save_and_close(fig2, save_dir, "training_history_groups.pdf")
 
 def plot_misclassification_rates(final_metrics_series, dataset_name, save_dir):
-    """最終テストセットのグループ別誤分類率をプロットする"""
+    """最終テストセットのグループ別誤分類率をプロット"""
     print("\nPlotting misclassification rates...")
     if 'WaterBirds' in dataset_name:
         group_labels = ['Landbird\non Land\n($y=-1, a=-1$)', 'Landbird\non Water\n($y=-1, a=+1$)', 
@@ -403,7 +403,7 @@ def plot_singular_value_evolution(sv_history, layers, title_prefix, save_dir, to
 # ==============================================================================
 
 def plot_all_results(history_df, analysis_histories, layers, save_dir, config):
-    """全てのプロット関数を呼び出し、結果を保存する"""
+    """全てのプロット関数を呼び出し，結果を保存"""
     print("\n--- Generating and saving all plots ---")
     
     plot_training_history(history_df, save_dir)

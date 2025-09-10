@@ -16,7 +16,7 @@ except ImportError:
     wilds = None
 
 def colorize_mnist(images, labels, correlation):
-    """ MNISTデータセットに色付けを行い，ラベルと色の相関を持つデータを作成する """
+    """ MNISTデータセットに色付けを行い，ラベルと色の相関を持つデータを作成 """
     labels_pm1 = (labels >= 5).float() * 2.0 - 1.0
     images_gray = images.float() / 255.0
     n_samples = len(labels_pm1)
@@ -51,7 +51,7 @@ def colorize_mnist(images, labels, correlation):
     return final_images_rgb, labels_pm1, attributes_pm1
 
 def get_colored_mnist(num_samples, correlation, train=True):
-    """ ColoredMNISTデータセットをロードして生成する """
+    """ ColoredMNISTデータセットをロードして生成 """
     print(f"Preparing Colored MNIST for {'train' if train else 'test'} set...")
     mnist_dataset = MNIST('./data', train=train, download=True)
 
@@ -61,11 +61,11 @@ def get_colored_mnist(num_samples, correlation, train=True):
     return colorize_mnist(images, targets, correlation)
 
 def get_waterbirds_dataset(num_train, num_test, image_size):
-    """ WILDSライブラリからWaterBirdsデータセットをロードする """
+    """ WILDSライブラリからWaterBirdsデータセットをロード """
     if wilds is None:
         raise ImportError("WaterBirds dataset requires the 'wilds' library. Please install it.")
 
-    # 破損している可能性のあるアーカイブファイルを削除する
+    # 破損している可能性のあるアーカイブファイルを削除
     dataset_archive_path = 'data/waterbirds_v1.0/archive.tar.gz'
     if os.path.exists(dataset_archive_path):
         print(f"Removing potentially corrupted archive: {dataset_archive_path}")

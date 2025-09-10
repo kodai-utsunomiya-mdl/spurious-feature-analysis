@@ -18,7 +18,7 @@ except ImportError:
 # ベクトル全体の相互情報量を計算する関数
 # ==============================================================================
 def vector_mutual_information(X: np.ndarray, y: np.ndarray, n_neighbors: int = 5) -> float:
-    """ Kozachenko-Leonenko推定法を用いてベクトルXとラベルyの相互情報量を計算する """
+    """ Kozachenko-Leonenko推定法を用いてベクトルXとラベルyの相互情報量を計算 """
     n_samples = X.shape[0]
     unique_classes, y_indices, class_counts = np.unique(y, return_inverse=True, return_counts=True)
 
@@ -52,7 +52,7 @@ def vector_mutual_information(X: np.ndarray, y: np.ndarray, n_neighbors: int = 5
 # ==============================================================================
 def conditional_mutual_information(Z: np.ndarray, target: np.ndarray, condition: np.ndarray,
                                      n_neighbors: int = 5) -> float:
-    """ 条件変数でデータを分割し，各部分集合の相互情報量の加重平均を計算する """
+    """ 条件変数でデータを分割し，各部分集合の相互情報量の加重平均を計算 """
     total_cmi = 0.0
     unique_conditions = np.unique(condition)
     for c_val in unique_conditions:
@@ -73,8 +73,8 @@ def conditional_mutual_information(Z: np.ndarray, target: np.ndarray, condition:
 # ==============================================================================
 def conditional_wasserstein_distance(Z: np.ndarray, primary_var: np.ndarray, condition_var: np.ndarray) -> float:
     """
-    条件変数でデータを分割し，各部分集合における主変数間のWasserstein距離の加重平均を計算する．
-    具体的には， E_c [ W_2^2( P(Z | primary=v1, condition=c), P(Z | primary=v2, condition=c) ) ] を計算する．
+    条件変数でデータを分割し，各部分集合における主変数間のWasserstein距離の加重平均を計算．
+    具体的には， E_c [ W_2^2( P(Z | primary=v1, condition=c), P(Z | primary=v2, condition=c) ) ] を計算．
     """
     if ot is None:
         return np.nan
@@ -127,7 +127,7 @@ def conditional_wasserstein_distance(Z: np.ndarray, primary_var: np.ndarray, con
 # グループ間のWasserstein距離を計算する関数
 # ==============================================================================
 def analyze_intergroup_distances(Z, y_np, a_np, dataset_type):
-    """ 4つの(y,a)グループ間の全6ペアのWasserstein距離を計算する """
+    """ 4つの(y,a)グループ間の全6ペアのWasserstein距離を計算 """
     print(f"\nAnalyzing INTER-GROUP Wasserstein distances on {dataset_type} data...")
     if ot is None:
         print("Skipping inter-group WD analysis because 'pot' library is not found.")
@@ -176,7 +176,7 @@ def analyze_intergroup_distances(Z, y_np, a_np, dataset_type):
 def barycentric_wasserstein_distance(Z: np.ndarray, y_np: np.ndarray, a_np: np.ndarray,
                                      dist_type: str, barycenter_support_size: int = 100) -> float:
     """
-    重心を計算し，重心分布間のWasserstein距離を計算する．
+    重心を計算し，重心分布間のWasserstein距離を計算．
     dist_type: 'core' または 'spurious'
     """
     if ot is None:
@@ -255,7 +255,7 @@ def barycentric_wasserstein_distance(Z: np.ndarray, y_np: np.ndarray, a_np: np.n
 # ==============================================================================
 def get_transport_direction(Z1, Z2):
     """
-    2つの分布間の平均変位ベクトルをメモリ効率良く計算する
+    2つの分布間の平均変位ベクトルをメモリ効率良く計算
     E[(z2 - z1)] where (z1, z2) ~ pi*
     """
     if ot is None or Z1.shape[0] == 0 or Z2.shape[0] == 0:
@@ -294,7 +294,7 @@ def get_transport_direction(Z1, Z2):
 # ==============================================================================
 def analyze_vector_averaging_alignment(Z, y_np, a_np, w_classifier, dataset_type):
     """
-    分類器の重みベクトルと，コア/スプリアス特徴の方向とのアライメントを計算する（ベクトル平均化）
+    分類器の重みベクトルと，コア/スプリアス特徴の方向とのアライメントを計算（ベクトル平均化）
     """
     print(f"\nAnalyzing VECTOR-AVERAGING classifier alignment on {dataset_type} data...")
     if ot is None:
@@ -462,7 +462,7 @@ def analyze_barycentric_alignment(Z, y_np, a_np, w_classifier, dataset_type, bar
 # ==============================================================================
 def analyze_transport_alignment(Z, y_np, a_np, w_classifier, dataset_type, barycenter_support_size=100):
     """
-    分類器wが何に基づいて形成されたかを，輸送コストの方向性分解によって分析する
+    分類器wが何に基づいて形成されたかを，輸送コストの方向性分解によって分析
     """
     print(f"\nAnalyzing TRANSPORT-BASED classifier alignment on {dataset_type} data...")
     if ot is None:

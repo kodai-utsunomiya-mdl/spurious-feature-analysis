@@ -8,7 +8,7 @@ import os
 from torch.utils.data import TensorDataset, DataLoader
 
 def l2_normalize_images(images_tensor):
-    """ バッチ内の各画像をL2ノルムが1になるように正規化する """
+    """ バッチ内の各画像をL2ノルムが1になるように正規化 """
     original_shape = images_tensor.shape
     # 画像をフラット化
     images_flat = images_tensor.view(original_shape[0], -1)
@@ -48,7 +48,7 @@ def show_dataset_samples(X_data, y_data, a_data, dataset_name, save_dir, num_sam
 
 
 def display_group_distribution(y_data, a_data, set_name, dataset_type, result_dir=None):
-    """ データセットのグループごとのサンプル数を表示し、ファイルに保存する """
+    """ データセットのグループごとのサンプル数を表示し，ファイルに保存 """
     header = f"\n--- {set_name} Group Distribution ({dataset_type}) ---"
     
     if dataset_type == 'WaterBirds':
@@ -83,7 +83,7 @@ def display_group_distribution(y_data, a_data, set_name, dataset_type, result_di
     if result_dir:
         filepath = os.path.join(result_dir, 'data_distribution.txt')
         with open(filepath, 'a', encoding='utf-8') as f:
-            # 複数回呼び出された場合のために、区切り線を追加
+            # 複数回呼び出された場合のために，区切り線を追加
             f.write(output_text + "\n")
 
 def evaluate_model(model, X_data, y_data, a_data, device, loss_function):
@@ -131,7 +131,7 @@ def evaluate_model(model, X_data, y_data, a_data, device, loss_function):
         }
 
 def extract_features(model, X_train, X_test, batch_size, device):
-    """訓練データとテストデータの全層の特徴量を抽出する"""
+    """訓練データとテストデータの全層の特徴量を抽出"""
     all_train_outputs_dict, all_test_outputs_dict = {}, {}
     model.eval()
     print("Extracting feature representations for analysis...")

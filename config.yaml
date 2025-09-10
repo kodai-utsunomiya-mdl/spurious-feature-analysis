@@ -1,7 +1,7 @@
 # sp/config.yaml
 
 # ---------------------------------
-# 実験の基本設定 (Basic Settings)
+# 実験の基本設定
 # ---------------------------------
 experiment_name: "ColoredMNIST_muP_run"
 dataset_name: "ColoredMNIST"  # "ColoredMNIST" or "WaterBirds"
@@ -12,7 +12,7 @@ use_skip_connections: false
 device: "cuda"                # "cuda" or "cpu"
 
 # ---------------------------------
-# データセット設定 (Dataset Settings)
+# データセット設定
 # ---------------------------------
 num_train_samples: 1000
 num_test_samples: 2000
@@ -21,13 +21,13 @@ train_correlation: 0.8
 test_correlation: 0.0
 
 # ---------------------------------
-# モデル設定 (Model Settings)
+# モデル設定
 # ---------------------------------
 num_hidden_layers: 1
 hidden_dim: 4096
 
 # ---------------------------------
-# 学習設定 (Training Settings)
+# 学習設定
 # ---------------------------------
 epochs: 20000
 batch_size: 1000 # num_train_samplesと同じ値にするとフルバッチ学習
@@ -36,7 +36,7 @@ learning_rate: 0.01
 momentum: 0.9
 
 # ------------------------------------------
-# 解析・可視化設定 (Analysis & Visualization)
+# 解析・可視化設定
 # ------------------------------------------
 # 解析を実行するエポック (カンマとスペースで区切られたリスト)
 analysis_epochs: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 150, 200, 250, 300, 400, 500, 600, 700, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12000, 14000, 16000, 18000, 20000]
@@ -50,7 +50,7 @@ barycenter_support_size: 100
 show_and_save_samples: true  # 実行時にデータセットのサンプル画像を表示・保存するか
 
 # ---------------------------------
-# 解析の有効/無効フラグ (Analysis Toggles)
+# 解析の有効/無効フラグ
 # ---------------------------------
 analyze_mutual_information: false
 analyze_intergroup_distance: true

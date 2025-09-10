@@ -12,7 +12,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 import pandas as pd
 
-# モジュール化されたスクリプトをインポート
+# スクリプトをインポート
 import data_loader
 import utils
 import model as model_module
@@ -60,7 +60,6 @@ def main(config_path='config.yaml'):
     X_test = utils.l2_normalize_images(X_test)
     train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=config['batch_size'], shuffle=True)
 
-    # 修正箇所：result_dirを引数に追加
     utils.display_group_distribution(y_train, a_train, "Train Set", config['dataset_name'], result_dir)
     utils.display_group_distribution(y_test, a_test, "Test Set", config['dataset_name'], result_dir)
 
