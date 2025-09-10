@@ -14,7 +14,7 @@ device: "cuda"                # "cuda" or "cpu"
 # ---------------------------------
 # データセット設定
 # ---------------------------------
-num_train_samples: 1000
+num_train_samples: 9000 # 1000 ##### 下記の batch_size を変えるのを忘れないこと
 num_test_samples: 2000
 # ColoredMNIST固有の設定
 train_correlation: 0.8
@@ -30,7 +30,7 @@ hidden_dim: 4096
 # 学習設定
 # ---------------------------------
 epochs: 20000
-batch_size: 1000 # num_train_samplesと同じ値にするとフルバッチ学習
+batch_size: 9000  # 必ずフルバッチ学習
 optimizer: "SGD"    # "SGD" or "Adam"
 learning_rate: 0.01
 momentum: 0.9
