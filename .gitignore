@@ -1,3 +1,5 @@
+# sp/.gitignore
+
 # Python
 __pycache__/
 *.pyc
@@ -12,6 +14,9 @@ env/
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# W&B local logs
+wandb/
 
 # Project-specific folders
 data/
