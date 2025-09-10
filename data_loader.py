@@ -1,3 +1,5 @@
+# sp/data_loader.py
+
 import torch
 import os
 import numpy as np
@@ -52,10 +54,9 @@ def get_colored_mnist(num_samples, correlation, train=True):
     """ ColoredMNISTデータセットをロードして生成する """
     print(f"Preparing Colored MNIST for {'train' if train else 'test'} set...")
     mnist_dataset = MNIST('./data', train=train, download=True)
-    indices = np.random.choice(len(mnist_dataset), num_samples, replace=False)
-    
-    images = mnist_dataset.data[indices]
-    targets = mnist_dataset.targets[indices]
+
+    images = mnist_dataset.data[:num_samples]
+    targets = mnist_dataset.targets[:num_samples]
 
     return colorize_mnist(images, targets, correlation)
 
@@ -63,6 +64,15 @@ def get_waterbirds_dataset(num_train, num_test, image_size):
     """ WILDSライブラリからWaterBirdsデータセットをロードする """
     if wilds is None:
         raise ImportError("WaterBirds dataset requires the 'wilds' library. Please install it.")
+
+    # 破損している可能性のあるアーカイブファイルを削除する
+    dataset_archive_path = 'data/waterbirds_v1.0/archive.tar.gz'
+    if os.path.exists(dataset_archive_path):
+        print(f"Removing potentially corrupted archive: {dataset_archive_path}")
+        try:
+            os.remove(dataset_archive_path)
+        except OSError as e:
+            print(f"Error removing archive file: {e}")
 
     full_dataset = wilds.get_dataset(dataset='waterbirds', root_dir='data', download=True)
     transform = transforms.Compose([transforms.Resize((image_size, image_size)), transforms.ToTensor()])

@@ -1,3 +1,5 @@
+# sp/plotting.py
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -99,7 +101,7 @@ def visualize_tsne_layers(train_outputs, y_train, a_train, test_outputs, y_test,
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.01))
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    _save_and_close(fig, save_dir, f"tsne_epoch_{epoch_num}.png")
+    _save_and_close(fig, save_dir, f"tsne_epoch_{epoch_num}.pdf")
 
 # ==============================================================================
 # 学習履歴プロット関数
@@ -131,7 +133,7 @@ def plot_training_history(history_df, save_dir):
     axes1[1, 1].legend(); axes1[1, 1].grid(True)
     
     fig1.tight_layout(rect=[0, 0, 1, 0.96])
-    _save_and_close(fig1, save_dir, "training_history_main.png")
+    _save_and_close(fig1, save_dir, "training_history_main.pdf")
 
     # --- Figure 2: グループごとのメトリクス ---
     fig2, axes2 = plt.subplots(2, 2, figsize=(18, 12))
@@ -158,7 +160,7 @@ def plot_training_history(history_df, save_dir):
         ax_loss.legend(handles=[p1, p2, p3, p4], loc='best')
 
     fig2.tight_layout(rect=[0, 0, 1, 0.96])
-    _save_and_close(fig2, save_dir, "training_history_groups.png")
+    _save_and_close(fig2, save_dir, "training_history_groups.pdf")
 
 def plot_misclassification_rates(final_metrics_series, dataset_name, save_dir):
     """最終テストセットのグループ別誤分類率をプロットする"""
@@ -181,7 +183,7 @@ def plot_misclassification_rates(final_metrics_series, dataset_name, save_dir):
     ax.grid(axis='y', linestyle='--', alpha=0.7)
     plt.xticks(rotation=0)
     fig.tight_layout()
-    _save_and_close(fig, save_dir, "misclassification_rates.png")
+    _save_and_close(fig, save_dir, "misclassification_rates.pdf")
 
 # ==============================================================================
 # 分析結果の時系列プロット関数
@@ -278,7 +280,7 @@ def plot_mi_evolution(mi_history_train, mi_history_test, all_target_layers, save
     ]
     _plot_evolution_layered(mi_history_train, mi_history_test, all_target_layers, configs, 
                     'Evolution of Mutual Information (Solid=Train, Dashed=Test)', 
-                    'mi_evolution.png', save_dir)
+                    'mi_evolution.pdf', save_dir)
 
 def plot_conditional_wd_evolution(wd_history_train, wd_history_test, all_target_layers, save_dir):
     if ot is None: return
@@ -290,7 +292,7 @@ def plot_conditional_wd_evolution(wd_history_train, wd_history_test, all_target_
     ]
     _plot_evolution_layered(wd_history_train, wd_history_test, all_target_layers, configs,
                     'Evolution of Conditional Wasserstein Distances',
-                    'conditional_wd_evolution.png', save_dir)
+                    'conditional_wd_evolution.pdf', save_dir)
 
 def plot_barycentric_wd_evolution(wd_history_train, wd_history_test, all_target_layers, save_dir):
     if ot is None: return
@@ -302,7 +304,7 @@ def plot_barycentric_wd_evolution(wd_history_train, wd_history_test, all_target_
     ]
     _plot_evolution_layered(wd_history_train, wd_history_test, all_target_layers, configs,
                     'Evolution of Barycentric Wasserstein Distances',
-                    'barycentric_wd_evolution.png', save_dir)
+                    'barycentric_wd_evolution.pdf', save_dir)
 
 def plot_bregman_wd_evolution(wd_history_train, wd_history_test, all_target_layers, save_dir):
     if ot is None: return
@@ -312,7 +314,7 @@ def plot_bregman_wd_evolution(wd_history_train, wd_history_test, all_target_laye
     ]
     _plot_evolution_layered(wd_history_train, wd_history_test, all_target_layers, configs,
                     'Evolution of Wasserstein Bregman Divergence',
-                    'bregman_divergence_evolution.png', save_dir)
+                    'bregman_divergence_evolution.pdf', save_dir)
 
 def plot_vector_averaging_alignment_evolution(history_train, history_test, save_dir):
     configs = [
@@ -323,7 +325,7 @@ def plot_vector_averaging_alignment_evolution(history_train, history_test, save_
     ]
     _plot_evolution_single(history_train, history_test, configs, 
                            'Evolution of Vector-Averaging Classifier Alignment', 
-                           'vec_avg_alignment_evolution.png', save_dir)
+                           'vec_avg_alignment_evolution.pdf', save_dir)
 
 def plot_barycentric_alignment_evolution(history_train, history_test, save_dir):
     configs = [
@@ -334,7 +336,7 @@ def plot_barycentric_alignment_evolution(history_train, history_test, save_dir):
     ]
     _plot_evolution_single(history_train, history_test, configs,
                            'Evolution of Barycentric Classifier Alignment',
-                           'barycentric_alignment_evolution.png', save_dir)
+                           'barycentric_alignment_evolution.pdf', save_dir)
 
 def plot_transport_alignment_evolution(history_train, history_test, save_dir):
     configs = [
@@ -345,7 +347,7 @@ def plot_transport_alignment_evolution(history_train, history_test, save_dir):
     ]
     _plot_evolution_single(history_train, history_test, configs, 
                     'Evolution of Transport-Based Classifier Alignment', 
-                    'transport_alignment_evolution.png', save_dir)
+                    'transport_alignment_evolution.pdf', save_dir)
                     
 def plot_intergroup_wd_evolution(wd_history_train, wd_history_test, all_target_layers, save_dir):
     if ot is None or (not wd_history_train and not wd_history_test): return
@@ -373,7 +375,7 @@ def plot_intergroup_wd_evolution(wd_history_train, wd_history_test, all_target_l
         ax.grid(True, which="both", ls="--")
 
     fig.tight_layout(rect=[0, 0, 0.85, 0.95])
-    _save_and_close(fig, save_dir, 'intergroup_wd_evolution.png')
+    _save_and_close(fig, save_dir, 'intergroup_wd_evolution.pdf')
 
 def plot_singular_value_evolution(sv_history, layers, title_prefix, save_dir, top_k=10):
     if not sv_history: return
@@ -394,7 +396,7 @@ def plot_singular_value_evolution(sv_history, layers, title_prefix, save_dir, to
         ax.grid(True, which="both", ls="--")
     
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    _save_and_close(fig, save_dir, f'singular_values_{title_prefix.replace(" ", "_").lower()}.png')
+    _save_and_close(fig, save_dir, f'singular_values_{title_prefix.replace(" ", "_").lower()}.pdf')
 
 # ==============================================================================
 # 全てのプロットを統括するラッパー関数

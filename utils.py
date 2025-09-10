@@ -1,3 +1,5 @@
+# sp/utils.py
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -45,9 +47,10 @@ def show_dataset_samples(X_data, y_data, a_data, dataset_name, save_dir, num_sam
     plt.close(fig)
 
 
-def display_group_distribution(y_data, a_data, set_name, dataset_type):
-    """ データセットのグループごとのサンプル数を表示する """
-    print(f"\n--- {set_name} Group Distribution ({dataset_type}) ---")
+def display_group_distribution(y_data, a_data, set_name, dataset_type, result_dir=None):
+    """ データセットのグループごとのサンプル数を表示し、ファイルに保存する """
+    header = f"\n--- {set_name} Group Distribution ({dataset_type}) ---"
+    
     if dataset_type == 'WaterBirds':
         labels = {
             'Waterbird on Water (y=+1, a=+1)': (1, 1), 'Waterbird on Land (y=+1, a=-1)': (1, -1),
@@ -62,9 +65,26 @@ def display_group_distribution(y_data, a_data, set_name, dataset_type):
     group_counts = {name: ((y_data == y_val) & (a_data == a_val)).sum().item()
                     for name, (y_val, a_val) in labels.items()}
 
+    # 表示とファイル書き込み用のテキストを作成
+    output_lines = [header]
     for name, count in group_counts.items():
-        print(f"{name:<35}: {count:>5} samples")
-    print(f"{'Total':<35}: {len(y_data):>5} samples\n")
+        line = f"{name:<35}: {count:>5} samples"
+        output_lines.append(line)
+    
+    total_line = f"{'Total':<35}: {len(y_data):>5} samples\n"
+    output_lines.append(total_line)
+    
+    output_text = "\n".join(output_lines)
+    
+    # コンソールに表示
+    print(output_text)
+
+    # ファイルに追記
+    if result_dir:
+        filepath = os.path.join(result_dir, 'data_distribution.txt')
+        with open(filepath, 'a', encoding='utf-8') as f:
+            # 複数回呼び出された場合のために、区切り線を追加
+            f.write(output_text + "\n")
 
 def evaluate_model(model, X_data, y_data, a_data, device, loss_function):
     """ モデルの性能を評価し，各種メトリクスを返す """

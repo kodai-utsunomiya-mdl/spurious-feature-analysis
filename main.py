@@ -1,3 +1,5 @@
+# sp/main.py
+
 import os
 import yaml
 import time
@@ -58,8 +60,9 @@ def main(config_path='config.yaml'):
     X_test = utils.l2_normalize_images(X_test)
     train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=config['batch_size'], shuffle=True)
 
-    utils.display_group_distribution(y_train, a_train, "Train Set", config['dataset_name'])
-    utils.display_group_distribution(y_test, a_test, "Test Set", config['dataset_name'])
+    # 修正箇所：result_dirを引数に追加
+    utils.display_group_distribution(y_train, a_train, "Train Set", config['dataset_name'], result_dir)
+    utils.display_group_distribution(y_test, a_test, "Test Set", config['dataset_name'], result_dir)
 
     # 4. モデルとオプティマイザの準備
     print("\n--- 2. Setting up Model and Optimizer ---")

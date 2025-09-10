@@ -1,3 +1,5 @@
+# sp/analysis.py
+
 import numpy as np
 import time
 from itertools import combinations
