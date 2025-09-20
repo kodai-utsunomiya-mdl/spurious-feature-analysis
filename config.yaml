@@ -3,7 +3,7 @@
 # ---------------------------------
 # 実験の基本設定
 # ---------------------------------
-experiment_name: "ColoredMNIST_muP_run"
+experiment_name: "fix_final_layer_ColoredMNIST_muP_run"
 dataset_name: "ColoredMNIST"  # "ColoredMNIST" or "WaterBirds"
 loss_function: "mse"          # "logistic" or "mse"
 activation_function: "relu"   # "relu", "gelu", "tanh", "identity"
@@ -34,6 +34,7 @@ batch_size: 9000  # 必ずフルバッチ学習
 optimizer: "SGD"    # "SGD" or "Adam"
 learning_rate: 0.01
 momentum: 0.9
+fix_final_layer: ture  # trueにすると最終層の重みを固定
 
 # ------------------------------------------
 # 解析・可視化設定

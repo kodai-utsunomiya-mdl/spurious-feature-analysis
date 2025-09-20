@@ -72,7 +72,7 @@ class MLP(nn.Module):
 
         return output_scalar, outputs
 
-def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim):
+def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim, fix_final_layer=False):
     """
     Args:
         model (nn.Module): 対象のMLPモデル
@@ -80,6 +80,7 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim):
         base_lr (float): 基本学習率 (η)
         hidden_dim (int): 隠れ層の幅 (n)
         input_dim (int): 入力次元 (d)
+        fix_final_layer (bool): 最終層の重みを固定するかのフラグ
 
     Returns:
         list: オプティマイザに渡すためのパラメータグループのリスト
@@ -90,6 +91,9 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim):
 
     print(f"\nApplying manual parametrization for '{method}'...")
     print(f"        - Input Dim (d): {input_dim}, Hidden Dim (n): {hidden_dim}, Base LR (η): {base_lr}")
+    if fix_final_layer:
+        print("        - Final layer weights are FROZEN.")
+
 
     with torch.no_grad():
         # --- 入力層 ---
@@ -152,7 +156,13 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim):
 
         std = np.sqrt(init_var)
         output_layer.weight.normal_(0, std)
-        optimizer_param_groups.append({'params': output_layer.weight, 'lr': lr})
-        print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = {lr:.2e}")
+        
+        if not fix_final_layer:
+            optimizer_param_groups.append({'params': output_layer.weight, 'lr': lr})
+            print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = {lr:.2e}")
+        else:
+            output_layer.weight.requires_grad = False
+            print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = 0.00 (Fixed)")
+
 
     return optimizer_param_groups

@@ -85,7 +85,8 @@ def main(config_path='config.yaml'):
 
     optimizer_params = model_module.apply_manual_parametrization(
         model, method=config['initialization_method'], base_lr=config['learning_rate'],
-        hidden_dim=config['hidden_dim'], input_dim=input_dim
+        hidden_dim=config['hidden_dim'], input_dim=input_dim,
+        fix_final_layer=config.get('fix_final_layer', False)
     )
 
     optimizer = optim.Adam(optimizer_params) if config['optimizer'] == 'Adam' else optim.SGD(optimizer_params, momentum=config['momentum'])
