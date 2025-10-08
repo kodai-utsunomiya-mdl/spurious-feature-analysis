@@ -80,7 +80,8 @@ def main(config_path='config.yaml'):
     model = model_module.MLP(
         input_dim=input_dim, hidden_dim=config['hidden_dim'],
         num_hidden_layers=config['num_hidden_layers'], activation_fn=config['activation_function'],
-        use_skip_connections=config['use_skip_connections']
+        use_skip_connections=config['use_skip_connections'],
+        initialization_method=config['initialization_method']
     ).to(device)
 
     optimizer_params = model_module.apply_manual_parametrization(

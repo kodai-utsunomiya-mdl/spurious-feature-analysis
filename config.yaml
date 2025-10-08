@@ -3,19 +3,19 @@
 # ---------------------------------
 # 実験の基本設定
 # ---------------------------------
-experiment_name: "fix_final_layer_ColoredMNIST_muP_run"
+experiment_name: "ColoredMNIST_mf"
 dataset_name: "ColoredMNIST"  # "ColoredMNIST" or "WaterBirds"
 loss_function: "mse"          # "logistic" or "mse"
-activation_function: "relu"   # "relu", "gelu", "tanh", "identity"
-initialization_method: "muP"  # "SP", "NTP", "muP"
+activation_function: "relu"   # 'relu', 'gelu', 'tanh', 'identity', 'silu', 'softplus'
+initialization_method: "mf"  # "SP", "NTP", "muP", "mf" (mfは隠れ層1つのときのみ有効)
 use_skip_connections: false
 device: "cuda"                # "cuda" or "cpu"
 
 # ---------------------------------
 # データセット設定
 # ---------------------------------
-num_train_samples: 9000 # 1000 ##### 下記の batch_size を変えるのを忘れないこと
-num_test_samples: 2000
+num_train_samples: 50000 # 1000 ##### 下記の batch_size を変えるのを忘れないこと
+num_test_samples: 10000
 # ColoredMNIST固有の設定
 train_correlation: 0.8
 test_correlation: 0.0
@@ -24,23 +24,23 @@ test_correlation: 0.0
 # モデル設定
 # ---------------------------------
 num_hidden_layers: 1
-hidden_dim: 4096
+hidden_dim: 8192
 
 # ---------------------------------
 # 学習設定
 # ---------------------------------
 epochs: 20000
-batch_size: 9000  # 必ずフルバッチ学習
+batch_size: 50000  # 必ずフルバッチ学習
 optimizer: "SGD"    # "SGD" or "Adam"
-learning_rate: 0.01
-momentum: 0.9
-fix_final_layer: ture  # trueにすると最終層の重みを固定
+learning_rate: 0.1
+momentum: 0.0
+fix_final_layer: false  # trueにすると最終層の重みを固定
 
 # ------------------------------------------
 # 解析・可視化設定
 # ------------------------------------------
 # 解析を実行するエポック (カンマとスペースで区切られたリスト)
-analysis_epochs: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 150, 200, 250, 300, 400, 500, 600, 700, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12000, 14000, 16000, 18000, 20000]
+analysis_epochs: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 150, 200, 250, 300, 400, 500, 600, 700, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12000, 14000, 16000, 18000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000]
 # t-SNE可視化を実行するエポック (空リスト[]で無効化)
 tsne_visualization_epochs: []
 
@@ -54,11 +54,11 @@ show_and_save_samples: true  # 実行時にデータセットのサンプル画�
 # 解析の有効/無効フラグ
 # ---------------------------------
 analyze_mutual_information: false
-analyze_intergroup_distance: true
-analyze_conditional_distance: true
+analyze_intergroup_distance: false # true
+analyze_conditional_distance: false # true
 analyze_barycentric_distance: false
 analyze_bregman_divergence: false
-analyze_vector_averaging_alignment: true
+analyze_vector_averaging_alignment: false # true
 analyze_barycentric_alignment: false
 analyze_transport_alignment: false
 analyze_weight_singular_values: false

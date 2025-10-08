@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_hidden_layers, activation_fn='relu', use_skip_connections=False):
+    def __init__(self, input_dim, hidden_dim, num_hidden_layers, activation_fn='relu', use_skip_connections=False, initialization_method='SP'):
         """
         MLPモデルの定義
         Args:
@@ -14,12 +14,15 @@ class MLP(nn.Module):
             num_hidden_layers (int): 隠れ層の数
             activation_fn (str): 活性化関数名 ('relu', 'gelu', 'tanh', 'identity')
             use_skip_connections (bool): Skip Connectionを使用するかどうかのフラグ
+            initialization_method (str): パラメータ化の手法 ('SP', 'NTP', 'muP', 'mf')
         """
         super().__init__()
         if num_hidden_layers < 1:
             raise ValueError("num_hidden_layers must be at least 1.")
 
         self.use_skip_connections = use_skip_connections
+        self.initialization_method = initialization_method
+        self.hidden_dim = hidden_dim
         self.layers = nn.ModuleList()
 
         # 入力層
@@ -38,6 +41,10 @@ class MLP(nn.Module):
             self.activation = nn.Tanh()
         elif activation_fn == 'identity':
             self.activation = nn.Identity()
+        elif activation_fn == 'silu':  # SiLU (Sigmoid Linear Unit)
+            self.activation = nn.SiLU()
+        elif activation_fn == 'softplus':  # Smoothed ReLU (Softplus)
+            self.activation = nn.Softplus()
         else:
             raise ValueError(f"Unknown activation function: {activation_fn}")
 
@@ -68,6 +75,11 @@ class MLP(nn.Module):
 
         # 分類器
         output_scalar = self.classifier(z).squeeze(-1)
+
+        # 'mf' (mean-field) の場合，出力層で 1/n のスケーリングを適用
+        if self.initialization_method == 'mf':
+            output_scalar = output_scalar / float(self.hidden_dim)
+
         outputs['logit'] = output_scalar
 
         return output_scalar, outputs
@@ -76,7 +88,7 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim, 
     """
     Args:
         model (nn.Module): 対象のMLPモデル
-        method (str): 'SP', 'NTP', 'muP'のいずれか
+        method (str): 'SP', 'NTP', 'muP', 'mf'のいずれか
         base_lr (float): 基本学習率 (η)
         hidden_dim (int): 隠れ層の幅 (n)
         input_dim (int): 入力次元 (d)
@@ -94,12 +106,15 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim, 
     if fix_final_layer:
         print("        - Final layer weights are FROZEN.")
 
+    if method == 'mf' and len(model.layers) != 1:
+        raise ValueError("The 'mf' (mean-field) parametrization is only supported for models with exactly one hidden layer.")
+
 
     with torch.no_grad():
         # --- 入力層 ---
         # Note: 入力データがL2正規化されているため，dによるスケーリングは削除済み
         input_layer = model.layers[0]
-        const = 2.0
+        const = 1.0 # 2.0
 
         if method == 'SP':
             init_var = const
@@ -108,6 +123,9 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim, 
             init_var = const
             lr = base_lr
         elif method == 'muP':
+            init_var = const
+            lr = base_lr * n
+        elif method == 'mf':
             init_var = const
             lr = base_lr * n
         else:
@@ -151,6 +169,9 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim, 
         elif method == 'muP':
             init_var = const / (n**2)
             lr = base_lr / n
+        elif method == 'mf':
+            init_var = const
+            lr = base_lr * n
         else:
             raise ValueError(f"Unknown method: {method}")
 
@@ -159,10 +180,16 @@ def apply_manual_parametrization(model, method, base_lr, hidden_dim, input_dim, 
         
         if not fix_final_layer:
             optimizer_param_groups.append({'params': output_layer.weight, 'lr': lr})
-            print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = {lr:.2e}")
+            if method == 'mf':
+                print(f"        - Output Layer (W^L+1): Init Var = {init_var:.2f}, LR = {lr:.2e}")
+            else:
+                print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = {lr:.2e}")
         else:
             output_layer.weight.requires_grad = False
-            print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = 0.00 (Fixed)")
+            if method == 'mf':
+                print(f"        - Output Layer (W^L+1): Init Var = {init_var:.2f}, LR = 0.00 (Fixed)")
+            else:
+                print(f"        - Output Layer (W^L+1): Init Var = 1/{int(n*n) if method=='muP' else int(n)}, LR = 0.00 (Fixed)")
 
 
     return optimizer_param_groups
