@@ -4,7 +4,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
-from itertools import combinations
+from itertools import combinations, product
 import pandas as pd
 
 # 'pot'ライブラリのインポート
@@ -398,6 +398,210 @@ def plot_singular_value_evolution(sv_history, layers, title_prefix, save_dir, to
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     _save_and_close(fig, save_dir, f'singular_values_{title_prefix.replace(" ", "_").lower()}.png')
 
+
+# 勾配グラム行列のプロット関数
+def plot_gradient_gram_evolution(history_train, history_test, save_dir):
+    if not history_train and not history_test: return
+    epochs = sorted(history_train.keys() if history_train else history_test.keys())
+    
+    group_keys = [(-1,-1), (-1,1), (1,-1), (1,1)]
+    maj_maj_keys = [f"G({y1},{a1})_vs_G({y2},{a2})" for (y1, a1), (y2, a2) in combinations(group_keys, 2) if y1==a1 and y2==a2]
+    min_min_keys = [f"G({y1},{a1})_vs_G({y2},{a2})" for (y1, a1), (y2, a2) in combinations(group_keys, 2) if y1!=a1 and y2!=a2]
+    maj_min_keys = [f"G({y1},{a1})_vs_G({y2},{a2})" for (y1, a1), (y2, a2) in combinations(group_keys, 2) if (y1==a1 and y2!=a2) or (y1!=a1 and y2==a2)]
+    
+    plot_configs = [
+        ('Majority-Majority', maj_maj_keys),
+        ('Minority-Minority', min_min_keys),
+        ('Majority-Minority', maj_min_keys)
+    ]
+
+    for title, keys in plot_configs:
+        fig, ax = plt.subplots(figsize=(12, 7))
+        fig.suptitle(f'Evolution of Gradient Gram Matrix ({title})', fontsize=16)
+        colors = plt.cm.jet(np.linspace(0, 1, len(keys)))
+
+        for i, key in enumerate(keys):
+            if history_train:
+                vals = [history_train.get(e, {}).get(key, np.nan) for e in epochs]
+                ax.plot(epochs, vals, marker='o', markersize=3, linestyle='-', color=colors[i], label=f'{key} (Train)')
+            if history_test:
+                vals = [history_test.get(e, {}).get(key, np.nan) for e in epochs]
+                ax.plot(epochs, vals, marker='x', markersize=3, linestyle='--', color=colors[i])
+
+        ax.set(xlabel='Epoch', ylabel='Inner Product (log)', yscale='symlog')
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        ax.grid(True, which="both", ls="--")
+        fig.tight_layout(rect=[0, 0, 0.85, 0.95])
+        _save_and_close(fig, save_dir, f'gradient_gram_{title.lower().replace("-", "_")}.png')
+
+# ヤコビアンノルムのプロット関数
+def plot_jacobian_norm_evolution(history_train, history_test, save_dir):
+    if not history_train and not history_test: return
+    epochs = sorted(history_train.keys() if history_train else history_test.keys())
+    
+    # Norms
+    fig1, ax1 = plt.subplots(figsize=(12, 7))
+    fig1.suptitle('Evolution of Jacobian Norms', fontsize=16)
+    norm_keys = [k for k in next(iter(history_train.values())).keys() if k.startswith('norm')]
+    colors = plt.cm.jet(np.linspace(0, 1, len(norm_keys)))
+    for i, key in enumerate(norm_keys):
+        if history_train:
+            vals = [history_train.get(e, {}).get(key, np.nan) for e in epochs]
+            ax1.plot(epochs, vals, marker='o', linestyle='-', color=colors[i], label=f'{key} (Train)')
+        if history_test:
+            vals = [history_test.get(e, {}).get(key, np.nan) for e in epochs]
+            ax1.plot(epochs, vals, marker='x', linestyle='--', color=colors[i])
+    ax1.set(xlabel='Epoch', ylabel='Squared Norm (log)', yscale='log')
+    ax1.legend(); ax1.grid(True, which="both", ls="--")
+    _save_and_close(fig1, save_dir, 'jacobian_norms.png')
+
+    # Inner Products
+    dot_keys = [k for k in next(iter(history_train.values())).keys() if k.startswith('dot')]
+    fig2, ax2 = plt.subplots(figsize=(12, 7))
+    fig2.suptitle('Evolution of Jacobian Inner Products', fontsize=16)
+    colors = plt.cm.jet(np.linspace(0, 1, len(dot_keys)))
+    for i, key in enumerate(dot_keys):
+        if history_train:
+            vals = [history_train.get(e, {}).get(key, np.nan) for e in epochs]
+            ax2.plot(epochs, vals, marker='o', linestyle='-', color=colors[i], label=f'{key} (Train)')
+        if history_test:
+            vals = [history_test.get(e, {}).get(key, np.nan) for e in epochs]
+            ax2.plot(epochs, vals, marker='x', linestyle='--', color=colors[i])
+    ax2.set(xlabel='Epoch', ylabel='Inner Product (log)', yscale='symlog')
+    ax2.legend(loc='center left', bbox_to_anchor=(1, 0.5)); ax2.grid(True, which="both", ls="--")
+    fig2.tight_layout(rect=[0, 0, 0.8, 0.95])
+    _save_and_close(fig2, save_dir, 'jacobian_inner_products.png')
+
+# 汎化ギャップのプロット関数
+def plot_generalization_gap_evolution(history_df, gen_gap_history, save_dir):
+    """汎化ギャップの推定値と実際のギャップの変遷をプロット"""
+    if not gen_gap_history:
+        print("No generalization gap history to plot.")
+        return
+
+    epochs = sorted(gen_gap_history.keys())
+    if not epochs: return
+    
+    # 実際の汎化ギャップを計算
+    # history_dfのインデックスは0から始まるので，epochsリスト（1から始まる）に合わせて調整
+    df_indices = [e - 1 for e in epochs if e - 1 < len(history_df)]
+    actual_epochs = [e for e in epochs if e - 1 < len(history_df)]
+    if not actual_epochs: return
+    
+    actual_gap_avg = (history_df.loc[df_indices, 'test_avg_loss'] - history_df.loc[df_indices, 'train_avg_loss']).values
+    actual_gap_worst = (history_df.loc[df_indices, 'test_worst_loss'] - history_df.loc[df_indices, 'train_worst_loss']).values
+    
+    # グループごとの実際の汎化ギャップ
+    test_group_losses = np.array(history_df.loc[df_indices, 'test_group_losses'].tolist())
+    train_group_losses = np.array(history_df.loc[df_indices, 'train_group_losses'].tolist())
+    actual_group_gaps = test_group_losses - train_group_losses
+    
+    group_keys = [f"G({y},{a})" for y in [-1, 1] for a in [-1, 1]]
+    colors = plt.cm.jet(np.linspace(0, 1, len(group_keys)))
+    
+    fig, ax = plt.subplots(figsize=(14, 8))
+    fig.suptitle('Evolution of Generalization Gap (Estimated vs. Actual)', fontsize=16)
+
+    # 推定ギャップをプロット
+    for i, key in enumerate(group_keys):
+        estimated_vals = [gen_gap_history.get(e, {}).get(key, np.nan) for e in epochs]
+        ax.plot(epochs, estimated_vals, marker='o', markersize=4, linestyle='--', color=colors[i], label=f'Estimated Gap ({key})')
+
+    # 実際のギャップをプロット
+    ax.plot(actual_epochs, actual_gap_avg, marker='', linestyle='-', color='black', linewidth=2, label='Actual Gap (Average)')
+    # グループごとの実際のギャップもプロット
+    for i, key in enumerate(group_keys):
+         ax.plot(actual_epochs, actual_group_gaps[:, i], marker='', linestyle='-', color=colors[i], linewidth=1.5, label=f'Actual Gap ({key})')
+
+
+    ax.set(xlabel='Epoch', ylabel='Generalization Gap (Loss)', yscale='log')
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    ax.grid(True, which="both", ls="--")
+    fig.tight_layout(rect=[0, 0, 0.85, 0.95])
+    _save_and_close(fig, save_dir, 'generalization_gap_evolution.png')
+
+# 勾配グラム行列のスペクトルプロット関数
+def plot_gradient_gram_spectrum_evolution(history_train, history_test, save_dir):
+    """勾配グラム行列の固有値と主固有ベクトルの成分の変遷をプロット"""
+    if not history_train and not history_test:
+        print("No gradient gram spectrum history to plot.")
+        return
+    
+    epochs = sorted(history_train.keys() if history_train else history_test.keys())
+    
+    fig, axes = plt.subplots(1, 3, figsize=(24, 7)) # グラフエリアを3つに変更
+    fig.suptitle('Evolution of Gradient Gram Matrix Spectrum', fontsize=16)
+
+    # --- 1. 固有値のプロット ---
+    ax1 = axes[0]
+    colors = plt.cm.viridis(np.linspace(0, 1, 4))
+    for i in range(4):
+        if history_train:
+            vals = [history_train.get(e, {}).get('eigenvalues', [np.nan]*4)[i] for e in epochs]
+            ax1.plot(epochs, vals, marker='o', markersize=3, linestyle='-', color=colors[i], label=f'λ_{i+1} (Train)')
+        if history_test:
+            vals = [history_test.get(e, {}).get('eigenvalues', [np.nan]*4)[i] for e in epochs]
+            ax1.plot(epochs, vals, marker='x', markersize=3, linestyle='--', color=colors[i], label=f'λ_{i+1} (Test)')
+    ax1.set(xlabel='Epoch', ylabel='Eigenvalue', title='Eigenvalues (λ₁ ≥ λ₂ ≥ λ₃ ≥ λ₄)', yscale='symlog', ylim_bottom=0)
+    ax1.legend()
+    ax1.grid(True, which="both", ls="--")
+
+    # --- 2. 主固有ベクトルの成分のプロット ---
+    ax2 = axes[1]
+    group_labels = ['$G_{(-1,-1)}$', '$G_{(-1,1)}$', '$G_{(1,-1)}$', '$G_{(1,1)}$']
+    for i in range(4):
+        if history_train:
+            vals = [history_train.get(e, {}).get('eigenvector1', [np.nan]*4)[i] for e in epochs]
+            ax2.plot(epochs, vals, marker='o', markersize=3, linestyle='-', color=colors[i], label=f'{group_labels[i]} (Train)')
+        if history_test:
+            vals = [history_test.get(e, {}).get('eigenvector1', [np.nan]*4)[i] for e in epochs]
+            ax2.plot(epochs, vals, marker='x', markersize=3, linestyle='--', color=colors[i], label=f'{group_labels[i]} (Test)')
+    ax2.set(xlabel='Epoch', ylabel='Component Value', title='Components of 1st Eigenvector (u₁)', ylim=(-1.05, 1.05))
+    ax2.legend()
+    ax2.grid(True, which="both", ls="--")
+
+    # --- 3. 2番目の固有ベクトルの成分のプロット ---
+    ax3 = axes[2]
+    for i in range(4):
+        if history_train:
+            vals = [history_train.get(e, {}).get('eigenvector2', [np.nan]*4)[i] for e in epochs]
+            ax3.plot(epochs, vals, marker='o', markersize=3, linestyle='-', color=colors[i], label=f'{group_labels[i]} (Train)')
+        if history_test:
+            vals = [history_test.get(e, {}).get('eigenvector2', [np.nan]*4)[i] for e in epochs]
+            ax3.plot(epochs, vals, marker='x', markersize=3, linestyle='--', color=colors[i], label=f'{group_labels[i]} (Test)')
+    ax3.set(xlabel='Epoch', ylabel='Component Value', title='Components of 2nd Eigenvector (u₂)', ylim=(-1.05, 1.05))
+    ax3.legend()
+    ax3.grid(True, which="both", ls="--")
+
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    _save_and_close(fig, save_dir, 'gradient_gram_spectrum_evolution.png')
+
+# 勾配ノルム比のプロット関数
+def plot_gradient_norm_ratio_evolution(history_train, history_test, save_dir):
+    """多数派/少数派の勾配ノルム比の変遷をプロット"""
+    if not history_train and not history_test:
+        print("No gradient norm ratio history to plot.")
+        return
+        
+    epochs = sorted(history_train.keys() if history_train else history_test.keys())
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.suptitle('Evolution of Gradient Norm Ratio (Majority / Minority)', fontsize=16)
+    
+    if history_train:
+        vals = [history_train.get(e, {}).get('ratio', np.nan) for e in epochs]
+        ax.plot(epochs, vals, marker='o', markersize=4, linestyle='-', color='blue', label='Train')
+    if history_test:
+        vals = [history_test.get(e, {}).get('ratio', np.nan) for e in epochs]
+        ax.plot(epochs, vals, marker='x', markersize=4, linestyle='--', color='cyan', label='Test')
+
+    ax.set(xlabel='Epoch', ylabel='Norm Ratio', yscale='log')
+    ax.legend()
+    ax.grid(True, which="both", ls="--")
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    _save_and_close(fig, save_dir, 'gradient_norm_ratio_evolution.png')
+
+
 # ==============================================================================
 # 全てのプロットを統括するラッパー関数
 # ==============================================================================
@@ -432,3 +636,23 @@ def plot_all_results(history_df, analysis_histories, layers, save_dir, config):
     if config['analyze_activation_singular_values']:
         plot_singular_value_evolution(analysis_histories['activation_sv_train'], layers, "Train_Activations", save_dir)
         plot_singular_value_evolution(analysis_histories['activation_sv_test'], layers, "Test_Activations", save_dir)
+
+    if config.get('analyze_gradient_gram', False):
+        plot_gradient_gram_evolution(analysis_histories['grad_gram_train'], analysis_histories['grad_gram_test'], save_dir)
+    if config.get('analyze_jacobian_norm', False):
+        plot_jacobian_norm_evolution(analysis_histories['jacobian_norm_train'], analysis_histories['jacobian_norm_test'], save_dir)
+    if config.get('analyze_generalization_gap', False):
+        plot_generalization_gap_evolution(history_df, analysis_histories['gen_gap_train'], save_dir)
+        
+    if config.get('analyze_gradient_gram_spectrum', False):
+        plot_gradient_gram_spectrum_evolution(
+            analysis_histories['grad_gram_spectrum_train'],
+            analysis_histories['grad_gram_spectrum_test'],
+            save_dir
+        )
+    if config.get('analyze_gradient_norm_ratio', False):
+        plot_gradient_norm_ratio_evolution(
+            analysis_histories['grad_norm_ratio_train'],
+            analysis_histories['grad_norm_ratio_test'],
+            save_dir
+        )

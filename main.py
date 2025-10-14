@@ -33,14 +33,14 @@ def main(config_path='config.yaml'):
             config=config,
             name=f"{config['experiment_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
-        print("✅ wandb is enabled and initialized.")
+        print("wandb is enabled and initialized.")
 
     # 2. 結果保存ディレクトリの作成
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     result_dir = os.path.join('results', f"{config['experiment_name']}_{timestamp}")
     os.makedirs(result_dir, exist_ok=True)
     shutil.copy(config_path, os.path.join(result_dir, 'config_used.yaml'))
-    print(f"✅ Results will be saved to: {result_dir}")
+    print(f"Results will be saved to: {result_dir}")
 
     # デバイス設定
     device = config['device'] if torch.cuda.is_available() and config['device'] == 'cuda' else "cpu"
@@ -92,7 +92,6 @@ def main(config_path='config.yaml'):
 
     optimizer = optim.Adam(optimizer_params) if config['optimizer'] == 'Adam' else optim.SGD(optimizer_params, momentum=config['momentum'])
 
-    # wandbでモデルの勾配とパラメータを監視
     if config.get('wandb', {}).get('enable', False):
         wandb.watch(model, log='all', log_freq=100)
 
@@ -110,7 +109,11 @@ def main(config_path='config.yaml'):
         'mi_train', 'mi_test', 'cond_wd_train', 'cond_wd_test', 'intergroup_wd_train', 'intergroup_wd_test',
         'bary_wd_train', 'bary_wd_test', 'bregman_wd_train', 'bregman_wd_test', 'vec_avg_align_train',
         'vec_avg_align_test', 'bary_align_train', 'bary_align_test', 'transport_align_train',
-        'transport_align_test', 'weight_sv', 'activation_sv_train', 'activation_sv_test'
+        'transport_align_test', 'weight_sv', 'activation_sv_train', 'activation_sv_test',
+        'grad_gram_train', 'grad_gram_test', 'jacobian_norm_train', 'jacobian_norm_test',
+        'gen_gap_train', 
+        'grad_gram_spectrum_train', 'grad_gram_spectrum_test',
+        'grad_norm_ratio_train', 'grad_norm_ratio_test'
     ]}
 
     for epoch in range(config['epochs']):
@@ -133,7 +136,6 @@ def main(config_path='config.yaml'):
 
         print(f"Epoch {epoch+1:5d}/{config['epochs']} | Train [Loss: {train_metrics['avg_loss']:.4f}, Worst: {train_metrics['worst_loss']:.4f}, Acc: {train_metrics['avg_acc']:.4f}, Worst: {train_metrics['worst_acc']:.4f}] | Test [Loss: {test_metrics['avg_loss']:.4f}, Worst: {test_metrics['worst_loss']:.4f}, Acc: {test_metrics['avg_acc']:.4f}, Worst: {test_metrics['worst_acc']:.4f}]")
 
-        # wandbにメトリクスをログとして記録
         if config.get('wandb', {}).get('enable', False):
             log_metrics = {
                 'epoch': epoch + 1,
@@ -146,29 +148,96 @@ def main(config_path='config.yaml'):
                 'test_avg_acc': test_metrics['avg_acc'],
                 'test_worst_acc': test_metrics['worst_acc'],
             }
-            # グループごとのメトリクスもログに追加
-            for i, loss_val in enumerate(train_metrics['group_losses']):
-                log_metrics[f'train_group_{i}_loss'] = loss_val
-            for i, acc_val in enumerate(train_metrics['group_accs']):
-                log_metrics[f'train_group_{i}_acc'] = acc_val
-            for i, loss_val in enumerate(test_metrics['group_losses']):
-                log_metrics[f'test_group_{i}_loss'] = loss_val
-            for i, acc_val in enumerate(test_metrics['group_accs']):
-                log_metrics[f'test_group_{i}_acc'] = acc_val
+            for i in range(4):
+                log_metrics[f'train_group_{i}_loss'] = train_metrics['group_losses'][i]
+                log_metrics[f'train_group_{i}_acc'] = train_metrics['group_accs'][i]
+                log_metrics[f'test_group_{i}_loss'] = test_metrics['group_losses'][i]
+                log_metrics[f'test_group_{i}_acc'] = test_metrics['group_accs'][i]
+
+            log_metrics['actual_gen_gap_avg'] = test_metrics['avg_loss'] - train_metrics['avg_loss']
+            log_metrics['actual_gen_gap_worst'] = test_metrics['worst_loss'] - train_metrics['worst_loss']
+            for i in range(4):
+                train_loss_g = train_metrics['group_losses'][i]
+                test_loss_g = test_metrics['group_losses'][i]
+                if not (np.isnan(train_loss_g) or np.isnan(test_loss_g)):
+                    log_metrics[f'actual_gen_gap_group_{i}'] = test_loss_g - train_loss_g
             wandb.log(log_metrics)
 
+        # --- チェックポイント分析 ---
         current_epoch = epoch + 1
-        if current_epoch in config.get('analysis_epochs', []) or current_epoch in config.get('tsne_visualization_epochs', []):
+
+        def should_run(analysis_name, epoch_list_name):
+            if not config.get(analysis_name, False):
+                return False
+            epoch_list = config.get(epoch_list_name)
+            if epoch_list is None:
+                return True
+            return current_epoch in epoch_list
+
+        run_general_analysis = should_run('run_general_analysis', 'analysis_epochs')
+        run_tsne = should_run('perform_tsne_visualization', 'tsne_visualization_epochs')
+        
+        run_grad_gram = should_run('analyze_gradient_gram', 'gradient_gram_analysis_epochs')
+        run_grad_spectrum = should_run('analyze_gradient_gram_spectrum', 'gradient_gram_spectrum_analysis_epochs')
+        run_grad_norm_ratio = should_run('analyze_gradient_norm_ratio', 'gradient_norm_ratio_analysis_epochs')
+        
+        run_any_analysis = run_general_analysis or run_tsne or run_grad_gram or run_grad_spectrum or run_grad_norm_ratio
+
+        if run_any_analysis:
             print(f"\n{'='*25} CHECKPOINT ANALYSIS @ EPOCH {current_epoch} {'='*25}")
-            train_outputs, test_outputs = utils.extract_features(model, X_train, X_test, config['batch_size'], device)
 
-            if current_epoch in config.get('analysis_epochs', []):
-                analysis.run_all_analyses(
-                    config, current_epoch, all_target_layers, model, train_outputs, test_outputs,
-                    y_train, a_train, y_test, a_test, analysis_histories
-                )
+            needs_feature_extraction = any(config.get(key, False) for key in [
+                'analyze_mutual_information', 'analyze_intergroup_distance', 'analyze_conditional_distance',
+                'analyze_barycentric_distance', 'analyze_bregman_divergence', 'analyze_vector_averaging_alignment',
+                'analyze_barycentric_alignment', 'analyze_transport_alignment', 'analyze_activation_singular_values',
+            ])
 
-            if config['perform_tsne_visualization'] and current_epoch in config.get('tsne_visualization_epochs', []):
+            train_outputs, test_outputs = (None, None)
+            if (run_general_analysis and needs_feature_extraction) or run_tsne:
+                train_outputs, test_outputs = utils.extract_features(model, X_train, X_test, config['batch_size'], device)
+            
+            temp_config = config.copy()
+            if not run_general_analysis:
+                for key in temp_config.keys():
+                    if key.startswith('analyze_') and 'gradient' not in key:
+                        temp_config[key] = False
+            
+            temp_config['analyze_gradient_gram'] = run_grad_gram
+            temp_config['analyze_gradient_gram_spectrum'] = run_grad_spectrum
+            temp_config['analyze_gradient_norm_ratio'] = run_grad_norm_ratio
+
+            analysis.run_all_analyses(
+                temp_config, current_epoch, all_target_layers, model, train_outputs, test_outputs,
+                X_train, y_train, a_train, X_test, y_test, a_test, analysis_histories,
+                optimizer.param_groups, history
+            )
+            
+            if config.get('wandb', {}).get('enable', False):
+                analysis_log_metrics = {}
+                for history_key, history_dict in analysis_histories.items():
+                    if current_epoch in history_dict:
+                        epoch_data = history_dict[current_epoch]
+                        if isinstance(epoch_data, dict):
+                            for sub_key, value in epoch_data.items():
+                                if isinstance(value, list):
+                                    for i, v in enumerate(value):
+                                        analysis_log_metrics[f'analysis/{history_key}/{sub_key}_{i+1}'] = v
+                                else:
+                                    analysis_log_metrics[f'analysis/{history_key}/{sub_key}'] = value
+                        elif isinstance(epoch_data, (list, tuple)):
+                            metric_names = []
+                            if 'mi' in history_key: metric_names = ['core', 'spurious', 'ratio']
+                            elif 'wd' in history_key: metric_names = ['core', 'spurious', 'ratio', 'simple_ratio']
+                            elif 'sv' in history_key: metric_names = [f'sv_{i+1}' for i in range(len(epoch_data))]
+                            elif 'align' in history_key: metric_names = ['core_align', 'spurious_align', 'ratio', 'simple_ratio']
+                            for i, v in enumerate(epoch_data):
+                                metric_name = metric_names[i] if i < len(metric_names) else f'metric_{i}'
+                                analysis_log_metrics[f'analysis/{history_key}/{metric_name}'] = v
+                if analysis_log_metrics:
+                    analysis_log_metrics['epoch'] = current_epoch
+                    wandb.log(analysis_log_metrics)
+
+            if run_tsne:
                 plotting.visualize_tsne_layers(
                     train_outputs, y_train, a_train, test_outputs, y_test, a_test,
                     all_target_layers, current_epoch, result_dir
@@ -183,11 +252,10 @@ def main(config_path='config.yaml'):
 
     plotting.plot_all_results(history_df, analysis_histories, all_target_layers, result_dir, config)
 
-    # wandbの実行を終了
     if config.get('wandb', {}).get('enable', False):
         wandb.finish()
 
-    print(f"\n✅ Experiment finished. All results saved in: {result_dir}")
+    print(f"\nExperiment finished. All results saved in: {result_dir}")
 
 if __name__ == '__main__':
     main(config_path='config.yaml')

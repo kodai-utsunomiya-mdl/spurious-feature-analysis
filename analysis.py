@@ -2,9 +2,11 @@
 
 import numpy as np
 import time
-from itertools import combinations
+from itertools import combinations, product, combinations_with_replacement
 from scipy.special import digamma
 from sklearn.neighbors import NearestNeighbors
+import torch
+import torch.nn.functional as F
 
 # 'pot'ライブラリのインポート
 try:
@@ -13,6 +15,124 @@ except ImportError:
     print("Warning: 'pot' library not found. Wasserstein distance analysis will not be available.")
     print("Please install it using: pip install pot")
     ot = None
+
+# ==============================================================================
+# ヤコビアン計算のヘルパー関数
+# ==============================================================================
+def get_model_jacobian(model, X_subset, device):
+    """モデルのヤコビアンの期待値を計算"""
+    model.eval()
+    jacobians = []
+    X_subset = X_subset.to(device)
+    
+    for i in range(len(X_subset)):
+        x_i = X_subset[i:i+1]
+        x_i.requires_grad_(True)
+        
+        y_pred, _ = model(x_i)
+        
+        # モデルの全パラメータに対する勾配を計算
+        grad_params = torch.autograd.grad(y_pred, model.parameters(), create_graph=True)
+        flat_grad = torch.cat([g.contiguous().view(-1) for g in grad_params])
+        jacobians.append(flat_grad.cpu().detach().numpy())
+        
+    return np.mean(jacobians, axis=0)
+
+# ==============================================================================
+# 汎化ギャップ計算のためのヘルパー関数
+# ==============================================================================
+def get_eta_vector(model, param_groups):
+    """ optimizer.param_groups から学習率etaのベクトルを再構築する """
+    eta_tensors = []
+    # optimizer作成時に model.parameters() が渡されているため，順序は一致する
+    for group in param_groups:
+        lr = group['lr']
+        for p in group['params']:
+            eta_tensors.append(torch.full_like(p.data, lr))
+            
+    return torch.cat([t.view(-1) for t in eta_tensors]).cpu().numpy()
+
+# ==============================================================================
+# 汎化ギャップの分析
+# ==============================================================================
+def analyze_generalization_gap(model, X_data, y_data, a_data, device, config, epoch, history, param_groups, loss_function, dataset_type):
+    """ グループごとの汎化ギャップ Γ_g を推定する """
+    print(f"\nAnalyzing GENERALIZATION GAP on {dataset_type} data...")
+    
+    # 1. 定数と変数の準備
+    base_lr = config['learning_rate']
+    t = base_lr * epoch  # 経過時間 t の近似
+    
+    # 経験損失の差 R_N(theta_0) - R_N(theta_t)
+    initial_loss = history['train_avg_loss'][0]
+    current_loss = history['train_avg_loss'][-1]
+    loss_diff = initial_loss - current_loss
+    if loss_diff < 0:
+        print(f"Warning: Negative loss difference ({loss_diff:.4f}). Setting generalization gap to 0.")
+        loss_diff = 0.0
+        
+    # eta ベクトルの取得
+    eta_vec = get_eta_vector(model, param_groups)
+    
+    # 2. グループごとに計算
+    gen_gap_results = {}
+    group_keys = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    
+    for y_val, a_val in group_keys:
+        mask = (y_data == y_val) & (a_data == a_val)
+        N_g = mask.sum().item()
+        
+        if N_g == 0:
+            gen_gap_results[f"G({y_val},{a_val})"] = np.nan
+            continue
+            
+        X_group, y_group = X_data[mask], y_data[mask]
+        
+        # jacobian_num_samples に基づいてサブサンプリング
+        num_samples_to_use = config.get('jacobian_num_samples', 100)
+        if N_g > num_samples_to_use:
+            indices = np.random.choice(N_g, num_samples_to_use, replace=False)
+            X_subset, y_subset = X_group[indices], y_group[indices]
+        else:
+            X_subset, y_subset = X_group, y_group
+            num_samples_to_use = N_g
+
+        # LPKトレース項の和 (sum_i K_t(z_i, z_i)) を計算
+        sum_of_integrals = 0.0
+        for i in range(num_samples_to_use):
+            x_i, y_i = X_subset[i:i+1], y_subset[i:i+1]
+            
+            model.zero_grad()
+            scores, _ = model(x_i.to(device))
+            
+            if loss_function == 'logistic':
+                loss = F.softplus(-y_i.to(device) * scores).mean()
+            else:  # mse
+                loss = F.mse_loss(scores, y_i.to(device))
+                
+            loss.backward()
+            
+            grad_vec = torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None]).cpu().numpy()
+            
+            # eta-norm の2乗を計算: ||∇l||^2_η
+            norm_sq = np.sum(eta_vec * (grad_vec ** 2))
+            
+            # 積分を近似: ∫||∇l||^2 ds ≈ t * ||∇l||^2
+            integral_approx = t * norm_sq
+            sum_of_integrals += integral_approx
+            
+        # サブサンプリングした場合は，グループ全体の和にスケールアップ
+        scaled_sum_of_integrals = sum_of_integrals * (N_g / num_samples_to_use)
+        
+        # Γ_g を計算
+        if scaled_sum_of_integrals < 0:
+            gamma_g = 0.0
+        else:
+            gamma_g = (np.sqrt(loss_diff) / N_g) * np.sqrt(scaled_sum_of_integrals)
+
+        gen_gap_results[f"G({y_val},{a_val})"] = gamma_g
+        
+    return gen_gap_results
 
 # ==============================================================================
 # ベクトル全体の相互情報量を計算する関数
@@ -567,6 +687,178 @@ def analyze_transport_alignment(Z, y_np, a_np, w_classifier, dataset_type, baryc
     return core_transport_alignment, spurious_transport_alignment
 
 # ==============================================================================
+# ★勾配グラム行列の分析
+# ==============================================================================
+def analyze_gradient_gram_matrix(model, X_data, y_data, a_data, device, loss_function, dataset_type, optimizer_params):
+    """グループ間の勾配の内積からなるグラム行列を計算（学習率を考慮）"""
+    print(f"\nAnalyzing GRADIENT GRAM MATRIX on {dataset_type} data...")
+    group_keys = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    group_grads = {}
+
+    for y_val, a_val in group_keys:
+        mask = (y_data == y_val) & (a_data == a_val)
+        if mask.sum() == 0:
+            group_grads[(y_val, a_val)] = None
+            continue
+        
+        X_group, y_group = X_data[mask], y_data[mask]
+        
+        model.zero_grad()
+        scores, _ = model(X_group.to(device))
+        
+        if loss_function == 'logistic':
+            loss = torch.nn.functional.softplus(-y_group.to(device) * scores).mean()
+        else: # mse
+            loss = torch.nn.functional.mse_loss(scores, y_group.to(device))
+            
+        loss.backward()
+        
+        # フラット化せず，パラメータごとの勾配テンソルのリストとして保持
+        grads_list = [p.grad.cpu().numpy() for p in model.parameters() if p.grad is not None]
+        group_grads[(y_val, a_val)] = grads_list
+
+    gram_matrix_results = {}
+    # 対角成分も計算するため combinations_with_replacement を使用
+    for (y1, a1), (y2, a2) in combinations_with_replacement(group_keys, 2):
+        grads1, grads2 = group_grads.get((y1, a1)), group_grads.get((y2, a2))
+        
+        key_name = f"G({y1},{a1})_vs_G({y2},{a2})"
+        if grads1 is not None and grads2 is not None:
+            # 層ごとの学習率を考慮した重み付き内積を計算
+            weighted_dot_product = 0.0
+            param_idx = 0
+            # optimizer_params の順序は model.parameters() と一致していることを前提とする
+            for group in optimizer_params:
+                lr = group['lr']
+                for _ in group['params']:
+                    # パラメータが勾配を持つことを確認
+                    if param_idx < len(grads1) and param_idx < len(grads2):
+                        grad1_p = grads1[param_idx].flatten()
+                        grad2_p = grads2[param_idx].flatten()
+                        weighted_dot_product += lr * np.dot(grad1_p, grad2_p)
+                    param_idx += 1
+            gram_matrix_results[key_name] = weighted_dot_product
+        else:
+            gram_matrix_results[key_name] = np.nan
+            
+    return gram_matrix_results
+
+# ==============================================================================
+# ヤコビアンノルムの分析
+# ==============================================================================
+def analyze_jacobian_norms(model, X_data, y_data, a_data, device, num_samples, dataset_type):
+    """グループごとのヤコビアンノルムと内積を計算"""
+    print(f"\nAnalyzing JACOBIAN NORMS on {dataset_type} data (using {num_samples} samples per group)...")
+    group_keys = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    group_jacobians = {}
+
+    for y_val, a_val in group_keys:
+        mask = (y_data == y_val) & (a_data == a_val)
+        if mask.sum() == 0:
+            group_jacobians[(y_val, a_val)] = None
+            continue
+        
+        X_group = X_data[mask]
+        # サンプル数が指定数より多い場合はランダムサンプリング
+        if len(X_group) > num_samples:
+            indices = np.random.choice(len(X_group), num_samples, replace=False)
+            X_subset = X_group[indices]
+        else:
+            X_subset = X_group
+            
+        group_jacobians[(y_val, a_val)] = get_model_jacobian(model, X_subset, device)
+
+    jacobian_results = {}
+    # ノルムの計算
+    for (y, a), jacobian in group_jacobians.items():
+        key_name = f"norm_G({y},{a})"
+        if jacobian is not None:
+            jacobian_results[key_name] = np.linalg.norm(jacobian)**2
+        else:
+            jacobian_results[key_name] = np.nan
+
+    # 内積の計算
+    for (y1, a1), (y2, a2) in combinations(group_keys, 2):
+        jac1, jac2 = group_jacobians.get((y1, a1)), group_jacobians.get((y2, a2))
+        key_name = f"dot_G({y1},{a1})_vs_G({y2},{a2})"
+        if jac1 is not None and jac2 is not None:
+            jacobian_results[key_name] = np.dot(jac1, jac2)
+        else:
+            jacobian_results[key_name] = np.nan
+            
+    return jacobian_results
+
+# ==============================================================================
+# 勾配グラム行列のスペクトル分析
+# ==============================================================================
+def analyze_gradient_gram_spectrum(gram_matrix_results, dataset_type):
+    """勾配グラム行列の固有値と主固有ベクトルを計算"""
+    print(f"\nAnalyzing GRADIENT GRAM SPECTRUM on {dataset_type} data...")
+    group_order = [(-1,-1), (-1,1), (1,-1), (1,1)]
+    G = np.zeros((4, 4))
+    
+    for i, g1 in enumerate(group_order):
+        for j, g2 in enumerate(group_order):
+            # 対称性を利用
+            if i <= j:
+                key = f"G({g1[0]},{g1[1]})_vs_G({g2[0]},{g2[1]})"
+                val = gram_matrix_results.get(key, np.nan)
+                G[i, j] = G[j, i] = val
+            
+    if np.isnan(G).any():
+        print("Gram matrix contains NaN values. Skipping spectrum analysis.")
+        return {'eigenvalues': [np.nan]*4, 'eigenvector1': [np.nan]*4, 'eigenvector2': [np.nan]*4}
+        
+    try:
+        eigenvalues, eigenvectors = np.linalg.eigh(G)
+        # 固有値を降順にソート
+        sorted_indices = np.argsort(eigenvalues)[::-1]
+        sorted_eigenvalues = eigenvalues[sorted_indices]
+        # 上位2つの固有ベクトル
+        main_eigenvector = eigenvectors[:, sorted_indices[0]]
+        second_eigenvector = eigenvectors[:, sorted_indices[1]]
+        
+        return {
+            'eigenvalues': sorted_eigenvalues.tolist(),
+            'eigenvector1': main_eigenvector.tolist(),
+            'eigenvector2': second_eigenvector.tolist()
+        }
+    except np.linalg.LinAlgError as e:
+        print(f"Eigendecomposition failed: {e}")
+        return {'eigenvalues': [np.nan]*4, 'eigenvector1': [np.nan]*4, 'eigenvector2': [np.nan]*4}
+
+# ==============================================================================
+# 多数派/少数派の勾配ノルム比の分析
+# ==============================================================================
+def analyze_gradient_norm_ratio(gram_matrix_results, dataset_type):
+    """多数派グループと少数派グループの勾配ノルムの比を計算"""
+    print(f"\nAnalyzing GRADIENT NORM RATIO on {dataset_type} data...")
+    
+    # 勾配ノルムの2乗はグラム行列の対角成分
+    norm_sq_maj1 = gram_matrix_results.get('G(-1,-1)_vs_G(-1,-1)', np.nan)
+    norm_sq_maj2 = gram_matrix_results.get('G(1,1)_vs_G(1,1)', np.nan)
+    norm_sq_min1 = gram_matrix_results.get('G(-1,1)_vs_G(-1,1)', np.nan)
+    norm_sq_min2 = gram_matrix_results.get('G(1,-1)_vs_G(1,-1)', np.nan)
+
+    # NaNチェック
+    if any(np.isnan([norm_sq_maj1, norm_sq_maj2, norm_sq_min1, norm_sq_min2])):
+        print("Cannot calculate norm ratio due to missing norm values.")
+        return {'ratio': np.nan}
+
+    # 各ノルムを計算し，合計
+    norm_maj = np.sqrt(norm_sq_maj1) + np.sqrt(norm_sq_maj2)
+    norm_min = np.sqrt(norm_sq_min1) + np.sqrt(norm_sq_min2)
+
+    # ゼロ除算を回避
+    if norm_min < 1e-9:
+        ratio = np.inf if norm_maj > 1e-9 else np.nan
+    else:
+        ratio = norm_maj / norm_min
+
+    return {'ratio': ratio}
+
+
+# ==============================================================================
 # 各層の分析関数
 # ==============================================================================
 def analyze_layer(layer_name, Z, y_np, a_np, n_neighbors, dataset_type, analyze_mi=True):
@@ -616,16 +908,65 @@ def analyze_layer(layer_name, Z, y_np, a_np, n_neighbors, dataset_type, analyze_
 
     return core_info, spurious_info, spurious_info_ratio, wd_core, wd_spurious, wd_ratio, wd_simple_ratio
 
+
 # ==============================================================================
 # 全ての分析を統括するラッパー関数
 # ==============================================================================
 def run_all_analyses(config, epoch, layers, model, train_outputs, test_outputs,
-                     y_train, a_train, y_test, a_test, histories):
-    """設定に基づいてすべての分析を実行し、結果をhistory辞書に保存する"""
+                     X_train, y_train, a_train, X_test, y_test, a_test, histories,
+                     optimizer_params, history): 
+    """設定に基づいてすべての分析を実行し，結果をhistory辞書に保存する"""
     y_train_np, a_train_np = y_train.numpy(), a_train.numpy()
     y_test_np, a_test_np = y_test.numpy(), a_test.numpy()
     
     analysis_target = config['analysis_target']
+
+    # --- 勾配グラム行列関連の分析 ---
+    grad_gram_train_results, grad_gram_test_results = None, None
+    run_grad_gram_related_analysis = config.get('analyze_gradient_gram', False) or \
+                                     config.get('analyze_gradient_gram_spectrum', False) or \
+                                     config.get('analyze_gradient_norm_ratio', False)
+
+    if run_grad_gram_related_analysis:
+        if analysis_target in ['train', 'both']:
+            grad_gram_train_results = analyze_gradient_gram_matrix(
+                model, X_train, y_train, a_train, config['device'], config['loss_function'], "Train", optimizer_params)
+            if config.get('analyze_gradient_gram', False):
+                histories['grad_gram_train'][epoch] = grad_gram_train_results
+        if analysis_target in ['test', 'both']:
+            grad_gram_test_results = analyze_gradient_gram_matrix(
+                model, X_test, y_test, a_test, config['device'], config['loss_function'], "Test", optimizer_params)
+            if config.get('analyze_gradient_gram', False):
+                histories['grad_gram_test'][epoch] = grad_gram_test_results
+
+    if config.get('analyze_gradient_gram_spectrum', False):
+        if grad_gram_train_results:
+            histories['grad_gram_spectrum_train'][epoch] = analyze_gradient_gram_spectrum(grad_gram_train_results, "Train")
+        if grad_gram_test_results:
+            histories['grad_gram_spectrum_test'][epoch] = analyze_gradient_gram_spectrum(grad_gram_test_results, "Test")
+
+    if config.get('analyze_gradient_norm_ratio', False):
+        if grad_gram_train_results:
+            histories['grad_norm_ratio_train'][epoch] = analyze_gradient_norm_ratio(grad_gram_train_results, "Train")
+        if grad_gram_test_results:
+            histories['grad_norm_ratio_test'][epoch] = analyze_gradient_norm_ratio(grad_gram_test_results, "Test")
+
+
+    # --- ヤコビアンノルムの分析 ---
+    if config.get('analyze_jacobian_norm', False):
+        if analysis_target in ['train', 'both']:
+            histories['jacobian_norm_train'][epoch] = analyze_jacobian_norms(
+                model, X_train, y_train, a_train, config['device'], config['jacobian_num_samples'], "Train")
+        if analysis_target in ['test', 'both']:
+            histories['jacobian_norm_test'][epoch] = analyze_jacobian_norms(
+                model, X_test, y_test, a_test, config['device'], config['jacobian_num_samples'], "Test")
+
+    # --- 汎化ギャップの推定 (訓練セットのみ) ---
+    if config.get('analyze_generalization_gap', False):
+        if analysis_target in ['train', 'both']:
+            histories['gen_gap_train'][epoch] = analyze_generalization_gap(
+                model, X_train, y_train, a_train, config['device'], config, epoch,
+                history, optimizer_params, config['loss_function'], "Train")
 
     # --- 重み行列の特異値解析 ---
     if config['analyze_weight_singular_values']:
@@ -662,7 +1003,7 @@ def run_all_analyses(config, epoch, layers, model, train_outputs, test_outputs,
 
     for layer in layers:
         # Train
-        if analysis_target in ['train', 'both']:
+        if analysis_target in ['train', 'both'] and train_outputs is not None:
             Z_train = train_outputs[layer].numpy()
             if config['analyze_mutual_information'] or config['analyze_conditional_distance']:
                 c_mi, s_mi, r_mi, c_wd, s_wd, r_wd, sr_wd = analyze_layer(layer, Z_train, y_train_np, a_train_np, config['n_neighbors_mi'], "Train", config['analyze_mutual_information'])
@@ -677,7 +1018,7 @@ def run_all_analyses(config, epoch, layers, model, train_outputs, test_outputs,
                 sr_bwd = s_bwd / c_bwd if not np.isnan(c_bwd) and c_bwd > 1e-9 else np.nan
                 bary_wd_train[layer] = (c_bwd, s_bwd, r_bwd, sr_bwd)
         # Test
-        if analysis_target in ['test', 'both']:
+        if analysis_target in ['test', 'both'] and test_outputs is not None:
             Z_test = test_outputs[layer].numpy()
             if config['analyze_mutual_information'] or config['analyze_conditional_distance']:
                 c_mi, s_mi, r_mi, c_wd, s_wd, r_wd, sr_wd = analyze_layer(layer, Z_test, y_test_np, a_test_np, config['n_neighbors_mi'], "Test", config['analyze_mutual_information'])
@@ -721,50 +1062,51 @@ def run_all_analyses(config, epoch, layers, model, train_outputs, test_outputs,
             print("Warning: Bregman Divergence requires Conditional and Barycentric analyses. Skipping.")
 
     # --- アライメント分析 ---
-    final_layer = f'layer_{config["num_hidden_layers"]}'
-    w_classifier = model.classifier.weight.data.cpu().numpy().flatten()
-    
-    # Vector Averaging
-    if config['analyze_vector_averaging_alignment']:
-        if analysis_target in ['train', 'both']:
-            Z_final = train_outputs[final_layer].numpy()
-            c_a, s_a = analyze_vector_averaging_alignment(Z_final, y_train_np, a_train_np, w_classifier, "Train")
-            r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
-            sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
-            histories['vec_avg_align_train'][epoch] = (c_a, s_a, r_a, sr_a)
-        if analysis_target in ['test', 'both']:
-            Z_final = test_outputs[final_layer].numpy()
-            c_a, s_a = analyze_vector_averaging_alignment(Z_final, y_test_np, a_test_np, w_classifier, "Test")
-            r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
-            sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
-            histories['vec_avg_align_test'][epoch] = (c_a, s_a, r_a, sr_a)
-            
-    # Barycentric (Vector-based)
-    if config['analyze_barycentric_alignment']:
-        if analysis_target in ['train', 'both']:
-            Z_final = train_outputs[final_layer].numpy()
-            c_a, s_a = analyze_barycentric_alignment(Z_final, y_train_np, a_train_np, w_classifier, "Train", config['barycenter_support_size'])
-            r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
-            sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
-            histories['bary_align_train'][epoch] = (c_a, s_a, r_a, sr_a)
-        if analysis_target in ['test', 'both']:
-            Z_final = test_outputs[final_layer].numpy()
-            c_a, s_a = analyze_barycentric_alignment(Z_final, y_test_np, a_test_np, w_classifier, "Test", config['barycenter_support_size'])
-            r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
-            sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
-            histories['bary_align_test'][epoch] = (c_a, s_a, r_a, sr_a)
-            
-    # Barycentric (Transport-based)
-    if config['analyze_transport_alignment']:
-        if analysis_target in ['train', 'both']:
-            Z_final = train_outputs[final_layer].numpy()
-            c_a, s_a = analyze_transport_alignment(Z_final, y_train_np, a_train_np, w_classifier, "Train", config['barycenter_support_size'])
-            r_a = s_a / (c_a + s_a) if not np.isnan(c_a + s_a) and (c_a + s_a) > 1e-9 else 0.0
-            sr_a = s_a / c_a if not np.isnan(c_a) and c_a > 1e-9 else np.nan
-            histories['transport_align_train'][epoch] = (c_a, s_a, r_a, sr_a)
-        if analysis_target in ['test', 'both']:
-            Z_final = test_outputs[final_layer].numpy()
-            c_a, s_a = analyze_transport_alignment(Z_final, y_test_np, a_test_np, w_classifier, "Test", config['barycenter_support_size'])
-            r_a = s_a / (c_a + s_a) if not np.isnan(c_a + s_a) and (c_a + s_a) > 1e-9 else 0.0
-            sr_a = s_a / c_a if not np.isnan(c_a) and c_a > 1e-9 else np.nan
-            histories['transport_align_test'][epoch] = (c_a, s_a, r_a, sr_a)
+    if train_outputs is not None and test_outputs is not None:
+        final_layer = f'layer_{config["num_hidden_layers"]}'
+        w_classifier = model.classifier.weight.data.cpu().numpy().flatten()
+        
+        # Vector Averaging
+        if config['analyze_vector_averaging_alignment']:
+            if analysis_target in ['train', 'both']:
+                Z_final = train_outputs[final_layer].numpy()
+                c_a, s_a = analyze_vector_averaging_alignment(Z_final, y_train_np, a_train_np, w_classifier, "Train")
+                r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
+                sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
+                histories['vec_avg_align_train'][epoch] = (c_a, s_a, r_a, sr_a)
+            if analysis_target in ['test', 'both']:
+                Z_final = test_outputs[final_layer].numpy()
+                c_a, s_a = analyze_vector_averaging_alignment(Z_final, y_test_np, a_test_np, w_classifier, "Test")
+                r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
+                sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
+                histories['vec_avg_align_test'][epoch] = (c_a, s_a, r_a, sr_a)
+                
+        # Barycentric (Vector-based)
+        if config['analyze_barycentric_alignment']:
+            if analysis_target in ['train', 'both']:
+                Z_final = train_outputs[final_layer].numpy()
+                c_a, s_a = analyze_barycentric_alignment(Z_final, y_train_np, a_train_np, w_classifier, "Train", config['barycenter_support_size'])
+                r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
+                sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
+                histories['bary_align_train'][epoch] = (c_a, s_a, r_a, sr_a)
+            if analysis_target in ['test', 'both']:
+                Z_final = test_outputs[final_layer].numpy()
+                c_a, s_a = analyze_barycentric_alignment(Z_final, y_test_np, a_test_np, w_classifier, "Test", config['barycenter_support_size'])
+                r_a = abs(s_a) / (abs(c_a) + abs(s_a)) if (abs(c_a) + abs(s_a)) > 1e-9 else 0.0
+                sr_a = abs(s_a) / abs(c_a) if abs(c_a) > 1e-9 else np.nan
+                histories['bary_align_test'][epoch] = (c_a, s_a, r_a, sr_a)
+                
+        # Barycentric (Transport-based)
+        if config['analyze_transport_alignment']:
+            if analysis_target in ['train', 'both']:
+                Z_final = train_outputs[final_layer].numpy()
+                c_a, s_a = analyze_transport_alignment(Z_final, y_train_np, a_train_np, w_classifier, "Train", config['barycenter_support_size'])
+                r_a = s_a / (c_a + s_a) if not np.isnan(c_a + s_a) and (c_a + s_a) > 1e-9 else 0.0
+                sr_a = s_a / c_a if not np.isnan(c_a) and c_a > 1e-9 else np.nan
+                histories['transport_align_train'][epoch] = (c_a, s_a, r_a, sr_a)
+            if analysis_target in ['test', 'both']:
+                Z_final = test_outputs[final_layer].numpy()
+                c_a, s_a = analyze_transport_alignment(Z_final, y_test_np, a_test_np, w_classifier, "Test", config['barycenter_support_size'])
+                r_a = s_a / (c_a + s_a) if not np.isnan(c_a + s_a) and (c_a + s_a) > 1e-9 else 0.0
+                sr_a = s_a / c_a if not np.isnan(c_a) and c_a > 1e-9 else np.nan
+                histories['transport_align_test'][epoch] = (c_a, s_a, r_a, sr_a)

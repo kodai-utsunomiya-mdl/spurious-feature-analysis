@@ -3,7 +3,7 @@
 # ---------------------------------
 # 実験の基本設定
 # ---------------------------------
-experiment_name: "ColoredMNIST_mf"
+experiment_name: "ColoredMNIST_mf_gradient"
 dataset_name: "ColoredMNIST"  # "ColoredMNIST" or "WaterBirds"
 loss_function: "mse"          # "logistic" or "mse"
 activation_function: "relu"   # 'relu', 'gelu', 'tanh', 'identity', 'silu', 'softplus'
@@ -14,7 +14,7 @@ device: "cuda"                # "cuda" or "cpu"
 # ---------------------------------
 # データセット設定
 # ---------------------------------
-num_train_samples: 50000 # 1000 ##### 下記の batch_size を変えるのを忘れないこと
+num_train_samples: 50000
 num_test_samples: 10000
 # ColoredMNIST固有の設定
 train_correlation: 0.8
@@ -30,7 +30,7 @@ hidden_dim: 8192
 # 学習設定
 # ---------------------------------
 epochs: 20000
-batch_size: 50000  # 必ずフルバッチ学習
+batch_size: 50000   # 必ずフルバッチ学習で実験（理論のため）
 optimizer: "SGD"    # "SGD" or "Adam"
 learning_rate: 0.1
 momentum: 0.0
@@ -44,32 +44,43 @@ analysis_epochs: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85
 # t-SNE可視化を実行するエポック (空リスト[]で無効化)
 tsne_visualization_epochs: []
 
+# 各種分析の実行エポック設定 (キー自体を省略 -> 毎エポック, 空リスト[] -> 無効化)
+gradient_gram_analysis_epochs:
+gradient_gram_spectrum_analysis_epochs:
+gradient_norm_ratio_analysis_epochs:
+
 # 解析対象データセット ('train', 'test', 'both')
 analysis_target: 'both'
 n_neighbors_mi: 5
 barycenter_support_size: 100
+jacobian_num_samples: 100    # ヤコビアンを計算するためのグループから使用するサンプル数
 show_and_save_samples: true  # 実行時にデータセットのサンプル画像を表示・保存するか
 
 # ---------------------------------
 # 解析の有効/無効フラグ
 # ---------------------------------
 analyze_mutual_information: false
-analyze_intergroup_distance: false # true
-analyze_conditional_distance: false # true
+analyze_intergroup_distance: false
+analyze_conditional_distance: false
 analyze_barycentric_distance: false
 analyze_bregman_divergence: false
-analyze_vector_averaging_alignment: false # true
+analyze_vector_averaging_alignment: false
 analyze_barycentric_alignment: false
 analyze_transport_alignment: false
 analyze_weight_singular_values: false
 analyze_activation_singular_values: false
 analyze_logit: false
 perform_tsne_visualization: false
+analyze_gradient_gram: true
+analyze_jacobian_norm: false
+analyze_generalization_gap: false
+analyze_gradient_gram_spectrum: true
+analyze_gradient_norm_ratio: true
 
 # ---------------------------------
 # wandb設定
 # ---------------------------------
 wandb:
   enable: true
-  project: "sp_exp"
+  project: "sp_exp_gram"
   entity: "mdl-tsukuba"
